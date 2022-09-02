@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      name: grafana
+      labels:
+        app: grafana
+    spec:
+      securityContext:
+        runAsUser: 0
+        fsGroup: 0
+      containers:
+      - name: grafana
+        image: grafana/grafana:latest
+        ports:
+        - name: grafana
+          containerPort: 3000
+        resources:
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+          requests: 
+            memory: 500M
+            cpu: "500m"
+        volumeMounts:
+          - mountPath: /var/lib/grafana # path for grafana db which holds all configs related to grafana and is persisted using host volumes
+            name: grafana-storage
+          - mountPath: /etc/grafana/provisioning/datasources # datasource path for grafana which omes from config map created
+            name: grafana-datasources
+            readOnly: false
+      nodeSelector:
+        kubernetes.io/hostname: worker2 # restricting this to worker2 as we are using host volumes..This can removed in case of prod setup where you have dynamic provisioning of storage
+      volumes:
+        - name: grafana-storage
+          persistentVolumeClaim:
+           claimName: grafana-storage-pvc # pvc to bind the pv with pod
+        - name: grafana-datasources
+          configMap:
+              defaultMode: 420
+              name: grafana-datasources # config map holding datasource configs

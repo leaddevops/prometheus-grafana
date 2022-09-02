@@ -1,0 +1,22 @@
+## Thsi config map helps to persiste the datasource configuration and also avoids manual setup of datasource everytime the pod restarts
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: monitoring
+data:
+  prometheus.yaml: |-
+    {
+        "apiVersion": 1,
+        "datasources": [
+            {
+               "access":"proxy",
+                "editable": true,
+                "name": "prometheus", # name of datasource.we will be using this in dashboards
+                "orgId": 1,
+                "type": "prometheus", #type of datasource
+                "url": "http://prometheus-service.monitoring.svc:8080", # prometheus inservice communication
+                "version": 1
+            }
+        ]
+    }
