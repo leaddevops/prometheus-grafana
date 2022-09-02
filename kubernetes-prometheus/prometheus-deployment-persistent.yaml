@@ -24,7 +24,7 @@ spec:
           args:
             - "--storage.tsdb.retention.time=6h" # timeframe prometheus need to keep the data
             - "--config.file=/etc/prometheus/prometheus.yml" ## config file path of prometheus server 
-            - "--storage.tsdb.path=/prometheus/" # path where prometheus pod data is stored within the pod
+            - "--storage.tsdb.path=/prometheus/" # path where scrapped data by prometheus is stored within the pod
           ports:
             - containerPort: 9090
           volumeMounts:
