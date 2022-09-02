@@ -1,0 +1,32 @@
+## static provisioning of pv
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: prom-storage-pv
+  labels:
+    type: local
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteMany
+  hostPath:
+    path: "/tmp/data" ## stores the data in this path on worker1 when below pvc is refered by prometheus pod
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prom-storage-pvc
+  namespace: monitoring
+  labels:
+    vol: prom-storage
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 5Gi
