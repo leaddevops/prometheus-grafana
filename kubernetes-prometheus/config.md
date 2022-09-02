@@ -1,5 +1,5 @@
 // The global configuration specifies parameters that are valid in all other configuration contexts. They also serve as defaults for other configuration sections.  
-
+\
     global:  
 // How frequently to scrape targets by default.Targets are the services which we wish to monitor.These can be also overwritten in individual scrape configs.This has to be tuned according to the size of clusters we dont want to overboard the data  
       scrape_interval: 5s  
