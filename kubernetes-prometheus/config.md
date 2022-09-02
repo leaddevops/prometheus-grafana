@@ -153,7 +153,7 @@ eg : nodename is worker1 __metrics_path__ would be replaced by /api/v1/nodes/wor
           replacement: kubernetes.default.svc:443
 		  
 // the below block means that get the node name from the label __meta_kubernetes_node_name and replace it in __metrics_path__ with the given replacement
-eg : nodename is worker1 __metrics_path__ would be replaced by /api/v1/nodes/worker1/proxy/metrics/cadvisor
+// eg : nodename is worker1 __metrics_path__ would be replaced by /api/v1/nodes/worker1/proxy/metrics/cadvisor
         - source_labels: [__meta_kubernetes_node_name]
           regex: (.+)
           target_label: __metrics_path__
