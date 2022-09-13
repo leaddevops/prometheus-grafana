@@ -9,3 +9,4 @@ Exporters used in Prometheus:
 1. Node exporter
 2. kube-state-metrics
 
+We also have the details of alert manager for kubernetes and sample alert configs for kubernetes cluster
