@@ -1,4 +1,360 @@
 ```
+// This block of configurations holds the alerts rules with a key called prometheus rules
+  prometheus.rules: |-
+// All the alerting rules are grouped when they belong to same set of instances
+    groups:
+// Name of the group
+// this is a sample alert which is created for testing purpose of receiver configs
+    - name: Sample alert
+// A set of rules config which consists expression to be validated serverity and a jist of what the alert is about
+// this is an example of alerting type of rule.There is one more of type of rule called recording rule which will be seen later
+      rules:
+// Name of the alert
+      - alert: High Pod Memory
+// promql expressions to be validated and alerted
+        expr: sum(container_memory_usage_bytes) > 1
+// The optional for clause causes Prometheus to wait for a certain duration.In this case, Prometheus will check that the alert continues to be active during each evaluation for 1 minutes before firing the alert. alerts that are active, but not firing yet, are in the pending state.
+        for: 1m
+// The labels clause allows specifying a set of additional labels to be attached to the alert. Any existing conflicting labels will be overwritten. The label values can be templated.
+        labels:
+          severity: high
+// The annotations clause specifies a set of informational labels that can be used to store longer additional information such as alert descriptions or runbook links. The annotation values can be templated.
+        annotations:
+          summary: High Memory Usage
+		  
+// This group has the examples of recording rules.allows us to precompute frequently needed or computationally expensive expressions and save their result as a new set of time series. 
+    - name: k8s.rules
+      rules:
+// rule to calculate the cpu usage of containers which belong to the same namespace and are saved in a new metric called namespace_container_cpu_usage_seconds_total_sum_rate.We can query using the same metric in prometheus once this rule is defined
+      - expr: |
+          sum(rate(container_cpu_usage_seconds_total{job="kubernetes-cadvisor", image!="", container!=""}[5m])) by (namespace)
+// record is used to save the above expression output in a different metric name and this metric can further be used for  any alerting/dashboard purposes
+        record: namespace_container_cpu_usage_seconds_total_sum_rate
+// rule to calculate the memory usage of containers which belong to the same namespace and are saved in a new metric called namespace_container_memory_usage_bytes_sum.We can query using the same metric in prometheus once this rule is defined
+      - expr: |
+          sum(container_memory_usage_bytes{job="kubernetes-cadvisor", image!="", container!=""}) by (namespace)
+        record: namespace_container_memory_usage_bytes_sum
+// Group of rules which alert when any of the prometheus targets are undiscoverable
+// Note the timframe here is 1m and all the groups starting here are the type of alerting rules(not recoding rules)		
+    - name: Target Down
+      rules:
+      - alert: TargetDown
+        annotations:
+// this meaningful message in the alert rule along with template values will keep the message dynamic in nature
+// The $labels variable holds the label key/value pairs of an alert instance. The $value variable holds the evaluated value of an alert instance.
+// For ex: <50%> of the <node-exporter> targets are down. A message like this will be shown when we expand the alerts in the prom UI
+// All the expressions used in the below rules will be displayed in the alerts -> message block upon clicking takes us to prometheus graph Ui and shows the reult in case if you want to dig further
+          message: '{{ $value }}% of the {{ $labels.job }} targets are down.'
+        expr: 100 * (count(up == 0) BY (job) / count(up) BY (job)) > 10
+        for: 1m
+        labels:
+          severity: high
+		  
+// the above group gives us an overall pictuer of targets but the below one in case if we want to monitor individual targets and categorize based on severity these can be used
+// Make sure we are only enabling one of it based on requirement
+// Note the change in timeframe here I customizd is 15 mins
+// you can bring one of the node down in the test cluster to see these alerts fire after 15 mins
+    - name: kubernetes-individual-targets
+      rules:
+// rule for Alertmanager status
+      - alert: AlertmanagerDown
+        annotations:
+          message: Alertmanager has disappeared from Prometheus target discovery.
+        expr: |
+          absent(up{job="kubernetes-service-endpoints", kubernetes_name="alertmanager",kubernetes_namespace="monitoring"} == 1)
+        for: 15m
+        labels:
+          severity: critical
+		  
+// rule for CoreDNS status
+      - alert: CoreDNSDown
+        annotations:
+          message: CoreDNS has disappeared from Prometheus target discovery.
+        expr: |
+          absent(up{job="kubernetes-service-endpoints", kubernetes_name="kube-dns"} == 1)
+        for: 15m
+        labels:
+          severity: critical
+		  
+// rule for KubeAPI status
+      - alert: KubeAPIDown
+        annotations:
+          message: KubeAPI has disappeared from Prometheus target discovery.
+        expr: |
+          absent(up{ job="kubernetes-apiservers"} == 1)
+        for: 15m
+        labels:
+          severity: critical
+
+// rule for KubeStateMetrics status		  
+      - alert: KubeStateMetricsDown
+        annotations:
+          message: KubeStateMetrics has disappeared from Prometheus target discovery.
+        expr: |
+          absent(up{job="kube-state-metrics"} == 1)
+        for: 15m
+        labels:
+          severity: critical
+
+// rule for Kubelet status		
+      - alert: KubernetesNodesDown
+        annotations:
+          message: Kubelet has disappeared from Prometheus target discovery.
+        expr: |
+          absent(up{job="kubernetes-nodes"} == 1)
+        for: 15m
+        labels:
+          severity: critical
+		  
+// rule for NodeExporter status	
+      - alert: NodeExporterDown
+        annotations:
+          message: NodeExporter has disappeared from Prometheus target discovery.
+        expr: |
+          absent(up{job="node-exporter"} == 1)
+        for: 15m
+        labels:
+          severity: critical
+		  
+// rule for Prometheus status	
+
+      - alert: PrometheusDown
+        annotations:
+          message: Prometheus has disappeared from Prometheus target discovery.
+        expr: |
+          absent(up{job="kubernetes-service-endpoints", kubernetes_name="prometheus-service", kubernetes_namespace="monitoring"} == 1)
+        for: 15m
+        labels:
+          severity: critical    
+
+// This group of alerts belong to various kubernetes workloads and their status		  
+    - name: kubernetes-apps
+      rules:
+// Alert for pod which is continuously restarting..Note that the alert will give the data of namespace and the container details along with the count of restarts in the message
+      - alert: KubePodCrashLooping
+        annotations:
+          message: Pod {{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container
+            }}) is restarting {{ printf "%.2f" $value }} times / 5 minutes.
+        expr: |
+          rate(kube_pod_container_status_restarts_total{job="kube-state-metrics"}[15m]) * 60 * 5 > 0
+        for: 1h
+        labels:
+          severity: critical
+		  
+// Alert for the pod which is in Unknown or pending state for more than an hour
+
+      - alert: KubePodNotReady
+        annotations:
+          message: Pod {{ $labels.namespace }}/{{ $labels.pod }} has been in a non-ready
+            state for longer than an hour.
+        expr: |
+          sum by (namespace, pod) (kube_pod_status_phase{job="kube-state-metrics", phase=~"Pending|Unknown"}) > 0
+        for: 1h
+        labels:
+          severity: critical
+		  
+// Alert for Deployment failure which hasnt been rolled back yet 
+      - alert: KubeDeploymentGenerationMismatch
+        annotations:
+          message: Deployment generation for {{ $labels.namespace }}/{{ $labels.deployment
+            }} does not match, this indicates that the Deployment has failed but has
+            not been rolled back.
+        expr: |
+          kube_deployment_status_observed_generation{job="kube-state-metrics"}
+            !=
+          kube_deployment_metadata_generation{job="kube-state-metrics"}
+        for: 15m
+        labels:
+          severity: critical
+		  
+// Alert for deployment replica mismatch that is read and desired replicas are not equal
+      - alert: KubeDeploymentReplicasMismatch
+        annotations:
+          message: Deployment {{ $labels.namespace }}/{{ $labels.deployment }} has not
+            matched the expected number of replicas for longer than an hour.
+        expr: |
+          kube_deployment_spec_replicas{job="kube-state-metrics"}
+            !=
+          kube_deployment_status_replicas_available{job="kube-state-metrics"}
+        for: 1h
+        labels:
+          severity: critical
+		  
+// Alert for StatefulSet replica mismatch that is read and desired replicas are not equal
+      - alert: KubeStatefulSetReplicasMismatch
+        annotations:
+          message: StatefulSet {{ $labels.namespace }}/{{ $labels.statefulset }} has
+            not matched the expected number of replicas for longer than 15 minutes.
+        expr: |
+          kube_statefulset_status_replicas_ready{job="kube-state-metrics"}
+            !=
+          kube_statefulset_status_replicas{job="kube-state-metrics"}
+        for: 15m
+        labels:
+          severity: critical
+		  
+// Alert for StatefulSet(new version) failure which hasnt been rolled back yet 
+      - alert: KubeStatefulSetGenerationMismatch
+        annotations:
+          message: StatefulSet generation for {{ $labels.namespace }}/{{ $labels.statefulset
+            }} does not match, this indicates that the StatefulSet has failed but has
+            not been rolled back.
+        expr: |
+          kube_statefulset_status_observed_generation{job="kube-state-metrics"}
+            !=
+          kube_statefulset_metadata_generation{job="kube-state-metrics"}
+        for: 15m
+        labels:
+          severity: critical
+
+// Alert for notifying bad daemonset status..You can observer this by bringing a worker node down in the cluster..Node exporter should see this issue
+      - alert: KubeDaemonSetRolloutStuck
+        annotations:
+          message: Only {{ $value }}% of the desired Pods of DaemonSet {{ $labels.namespace
+            }}/{{ $labels.daemonset }} are scheduled and ready.
+        expr: |
+          kube_daemonset_status_number_ready{job="kube-state-metrics"}
+            /
+          kube_daemonset_status_desired_number_scheduled{job="kube-state-metrics"} * 100 < 100
+        for: 15m
+        labels:
+          severity: critical
+		  
+// Alert for notifying bad daemonset count is matching the desired number..You can observer this by bringing a worker node down in the cluster..Node exporter should see this issue
+      - alert: KubeDaemonSetNotScheduled
+        annotations:
+          message: '{{ $value }} Pods of DaemonSet {{ $labels.namespace }}/{{ $labels.daemonset
+            }} are not scheduled.'
+        expr: |
+          kube_daemonset_status_desired_number_scheduled{job="kube-state-metrics"}
+            -
+          kube_daemonset_status_current_number_scheduled{job="kube-state-metrics"} > 0
+        for: 10m
+        labels:
+          severity: warning
+		  
+// Alert for notifying the ds pods if they are not supposed to run on a node
+// For ex: Pods of DaemonSet monitoring/node-exporter are running where they are not supposed to run.
+      - alert: KubeDaemonSetMisScheduled
+        annotations:
+          message: '{{ $value }} Pods of DaemonSet {{ $labels.namespace }}/{{ $labels.daemonset
+            }} are running where they are not supposed to run.'
+        expr: |
+          kube_daemonset_status_number_misscheduled{job="kube-state-metrics"} > 0
+        for: 10m
+        labels:
+          severity: warning
+		  
+// This group of alerts depicts infrastructure alerts for memory and CPU usage
+    - name: Infrastructure alerts
+      rules:
+// Alert which notifies when actual memory usage of pods is greater than 90 % of cluster memory capacity
+      - alert: Cluster Memory Usage
+        expr: sum(container_memory_working_set_bytes{id="/"})/sum(machine_memory_bytes{}) * 100 > 90
+        for: 5m
+        labels:
+          severity: high
+        annotations:
+          summary: Cluster Memory Usage > 90%
+		  
+// Alert which notifies when actual CPU usage of pods is greater than 90 % of cluster CPU capacity
+      - alert: Cluster CPU Usage 
+        expr: sum (rate (container_cpu_usage_seconds_total{id="/"}[5m])) / sum (machine_cpu_cores{}) * 100 > 90
+        for: 5m
+        labels:
+          severity: high
+        annotations:
+          summary: "Cluster CPU Usage  > 90%"
+          description: "Cluster CPU Usage on host {{$labels.instance}} : (current value: {{ $value }})." 
+		  
+// Below group of alerts has alerts related to kubernetes nodes,apiserver,certificates
+
+    - name: kubernetes-system
+      rules:
+// Alert to notify when the node is down
+      - alert: KubeNodeNotReady
+        annotations:
+          message: '{{ $labels.node }} has been unready for more than an hour.'
+        expr: |
+          kube_node_status_condition{job="kube-state-metrics",condition="Ready",status="true"} == 0
+        for: 30m
+        labels:
+          severity: warning
+		  
+// Alert to notify when the components of kubernetes are running on different versions
+      - alert: KubeVersionMismatch
+        annotations:
+          message: There are {{ $value }} different semantic versions of Kubernetes
+            components running.
+        expr: |
+          count(count by (gitVersion) (label_replace(kubernetes_build_info{job!="kube-dns"},"gitVersion","$1","gitVersion","(v[0-9]*.[0-9]*.[0-9]*).*"))) > 1
+        for: 1h
+        labels:
+          severity: warning
+
+// Alert to notify when there are too many 500 errors when kubectl command is issued		  
+      - alert: KubeClientErrors
+        annotations:
+          message: Kubernetes API server client '{{ $labels.job }}/{{ $labels.instance
+            }}' is experiencing {{ printf "%0.0f" $value }}% errors.'
+        expr: |
+          (sum(rate(rest_client_requests_total{code=~"5.."}[5m])) by (instance, job)
+            /
+          sum(rate(rest_client_requests_total[5m])) by (instance, job))
+          * 100 > 1
+        for: 15m
+        labels:
+          severity: warning
+		  
+// ALert to notify when close to 110 pods are scheduled or running on a node..As per kube sandards it has be less than or equal to 110
+      - alert: KubeletTooManyPods
+        annotations:
+          message: Kubelet {{ $labels.instance }} is running {{ $value }} Pods, close
+            to the limit of 110.
+        expr: |
+          kubelet_running_pods{job="kubernetes-nodes"} > 110 * 0.9
+        for: 15m
+        labels:
+          severity: warning
+		  
+// Alert to notify internal API server communication failures
+// For ex: if one of the node is down this would be the message you see 
+// API server is returning errors for 33.33333333333333% of requests for GET nodes proxy.
+      - alert: KubeAPIErrorsHigh
+        annotations:
+          message: API server is returning errors for {{ $value }}% of requests for
+            {{ $labels.verb }} {{ $labels.resource }} {{ $labels.subresource }}.
+        expr: |
+          sum(rate(apiserver_request_total{job="kubernetes-apiservers",code=~"^(?:5..)$"}[5m])) by (resource,subresource,verb)
+            /
+          sum(rate(apiserver_request_total{job="kubernetes-apiservers"}[5m])) by (resource,subresource,verb) * 100 > 10
+        for: 10m
+        labels:
+          severity: critical
+		  
+// Alert to notify the certificate expiry within in next 7 days..These certs are used internally by kubernetes to authenticate to api server
+    
+      - alert: KubeClientCertificateExpiration
+        annotations:
+          message: A client certificate used to authenticate to the apiserver is expiring
+            in less than 7.0 days.
+        expr: |
+          apiserver_client_certificate_expiration_seconds_count{job="kubernetes-apiservers"} > 0 and histogram_quantile(0.01, sum by (job, le) (rate(apiserver_client_certificate_expiration_seconds_bucket{job="kubernetes-apiservers"}[5m]))) < 604800
+        labels:
+          severity: warning
+		  
+// Alert to notify the certificate expiry within in next 24 hours..These certs are used internally by kubernetes to authenticate to api server..Note the change in the serverity
+      - alert: KubeClientCertificateExpiration
+        annotations:
+          message: A client certificate used to authenticate to the apiserver is expiring
+            in less than 24.0 hours.
+        expr: |
+          apiserver_client_certificate_expiration_seconds_count{job="apiserver"} > 0 and histogram_quantile(0.01, sum by (job, le) (rate(apiserver_client_certificate_expiration_seconds_bucket{job="apiserver"}[5m]))) < 86400
+        labels:
+          severity: critical   
+		  
+// From this block prometheus scrapping config starts
+  prometheus.yml: |-
 // The global configuration specifies parameters that are valid in all other configuration contexts. They also serve as defaults for other configuration sections.  
     global:  
 
