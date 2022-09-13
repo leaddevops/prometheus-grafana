@@ -1,0 +1,28 @@
+# this config map holds the receiver configurations and route configurations
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: alertmanager-config
+  namespace: monitoring
+data:
+  config.yml: |-
+    global:
+    templates: # this helps us to use templates which we created via other config map.This is mounted into the pod under deployment configs
+    - '/etc/alertmanager/*.tmpl'
+    route:
+# this  is the parent route config child routes also can be configured if you have different routes for different severity..Fo ex if you wan to sent to slack when severity is crtical..its possible..Bu tby default this route config will be used
+      receiver: alert-emailer # we can use multiple receivers in this route out of which we are using the alert-emailer/its a custom name and configs are defined below
+      group_by: ['alertname', 'priority'] #The labels by which incoming alerts are grouped together.
+      group_wait: 10s   # When a new group of alerts is created by an incoming alert, wait at least 'group_wait' to send the initial notification.This way ensures that you get multiple alerts for the same group that startfiring shortly after another are batched together on the first notification.
+      repeat_interval: 30m   # If an alert has successfully been sent, wait 'repeat_interval' to resend them.
+# A list of notification receivers. 
+    receivers:
+    - name: alert-emailer
+      email_configs: # configuring email as receiver
+      - to: <receiver email@gmail.com>
+        send_resolved: true # sents notifications once alerts are resolved
+        from: <sender email@gmail.com>
+        smarthost: smtp.gmail.com:587 # valid smtp host in this case gmail
+        auth_username: <sender email@gmail.com>
+        auth_identity: <sender email@gmail.com>
+        auth_password: password # giving sender gmail password is also fine but we suggest generate an app password and use it here.To do that, go to Google Account Settings -> Security -> Signing in to Google -> App password 

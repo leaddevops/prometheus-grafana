@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alertmanager
+  template:
+    metadata:
+      name: alertmanager
+      labels:
+        app: alertmanager
+    spec:
+      containers:
+      - name: alertmanager
+        image: prom/alertmanager:latest
+        args:
+          - "--config.file=/etc/alertmanager/config.yml" # receiver configs
+          - "--storage.path=/alertmanager" # if you wish to maintain persistence of alerts you can configure pv and pvc's 
+        ports:
+        - name: alertmanager
+          containerPort: 9093
+        resources:
+            requests:
+              cpu: 500m
+              memory: 500M
+            limits:
+              cpu: 1
+              memory: 1Gi
+        volumeMounts:
+        - name: config-volume # config map for receiver data
+          mountPath: /etc/alertmanager
+        - name: templates-volume # config map which we created to hold templates config
+          mountPath: /etc/alertmanager-templates
+        - name: alertmanager # temporary  host storage 
+          mountPath: /alertmanager
+      volumes:
+      - name: config-volume 
+        configMap:
+          name: alertmanager-config
+      - name: templates-volume
+        configMap:
+          name: alertmanager-templates
+      - name: alertmanager #  if you wish to maintain persistence of alerts you can configure pv
+ and pvc's
+        emptyDir: {}
