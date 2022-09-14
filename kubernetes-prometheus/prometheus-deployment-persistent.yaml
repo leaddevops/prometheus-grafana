@@ -32,8 +32,8 @@ spec:
               mountPath: /etc/prometheus/
             - name: prometheus-storage-volume # this volume helps prometheus data to be persisted even after a pod restarts
               mountPath: /prometheus/
-      nodeSelector:
-          kubernetes.io/hostname: worker1 # we are restricting the pod to spin only on worker1 due to hostpath pv which we created for data persistence. In production setup usually storage classes other than manual and dynamic provision is used
+      #nodeSelector:
+      #    kubernetes.io/hostname: worker1 # we are restricting the pod to spin only on worker1 due to hostpath pv which we created for data persistence. In production setup usually storage classes other than manual and dynamic provision is used
       volumes:
         - name: prometheus-config-volume
           configMap:

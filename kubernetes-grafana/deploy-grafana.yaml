@@ -107,8 +107,8 @@ spec:
           - mountPath: /etc/grafana/provisioning/datasources # datasource path for grafana which omes from config map created
             name: grafana-datasources
             readOnly: false
-      nodeSelector:
-        kubernetes.io/hostname: worker2 # restricting this to worker2 as we are using host volumes..This can removed in case of prod setup where you have dynamic provisioning of storage
+      #nodeSelector:
+      #  kubernetes.io/hostname: worker2 # restricting this to worker2 as we are using host volumes..This can removed in case of prod setup where you have dynamic provisioning of storage
       volumes:
         - name: grafana-storage
           persistentVolumeClaim:
